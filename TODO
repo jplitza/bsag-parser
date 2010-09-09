@@ -1,0 +1,15 @@
+GUI:
+* add i18n
+* portrait mode
+* later/earlier function
+* more info on route page
+* "link" to result page
+* configurable defaults
+* dep/arr selection
+
+Widget:
+* create it
+
+Backend:
+* later/earlier function
+* discover more error msgs
