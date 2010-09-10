@@ -1,4 +1,5 @@
 #!/usr/bin/python
+# -*- coding: utf-8 -*-
 
 import datetime
 from threading import Thread
@@ -23,47 +24,58 @@ class SearchForm:
 
         self.pan = hildon.PannableArea()
         self.form = gtk.VBox()
-        table = gtk.Table(2, 4, False)
+        table = gtk.Table(3, 4, False)
 
         self.origin_station = hildon.Entry(
             gtk.HILDON_SIZE_FINGER_HEIGHT)
         self.origin_station.connect("activate", self.search_activated)
         self.origin_station.set_placeholder("Starthaltestelle")
-        table.attach(self.origin_station, 0, 1, 0, 1)
+        table.attach(self.origin_station, 0, 2, 0, 1)
 
         self.origin_city = hildon.Entry(
             gtk.HILDON_SIZE_FINGER_HEIGHT)
         self.origin_city.connect("activate", self.search_activated)
         self.origin_city.set_placeholder("Stadt (Bremen)")
-        table.attach(self.origin_city, 1, 2, 0, 1)
+        table.attach(self.origin_city, 2, 3, 0, 1)
 
         self.destination_station = hildon.Entry(
             gtk.HILDON_SIZE_FINGER_HEIGHT)
         self.destination_station.connect("activate", self.search_activated)
         self.destination_station.set_placeholder("Zielhaltestelle")
-        table.attach(self.destination_station, 0, 1, 1, 2)
+        table.attach(self.destination_station, 0, 2, 1, 2)
 
         self.destination_city = hildon.Entry(
             gtk.HILDON_SIZE_FINGER_HEIGHT)
         self.destination_city.connect("activate", self.search_activated)
         self.destination_city.set_placeholder("Stadt (Bremen)")
-        table.attach(self.destination_city, 1, 2, 1, 2)
+        table.attach(self.destination_city, 2, 3, 1, 2)
+
+        self.deparr = hildon.PickerButton(
+            gtk.HILDON_SIZE_FINGER_HEIGHT,
+            hildon.BUTTON_ARRANGEMENT_VERTICAL)
+        deparr_selector = hildon.TouchSelector()
+        deparr_model = gtk.ListStore(str, str)
+        deparr_model.append(["ab", "dep"])
+        deparr_model.append(["an", "arr"])
+        deparr_selector.append_text_column(deparr_model, True)
+        self.deparr.set_selector(deparr_selector)
+        table.attach(self.deparr, 0, 1, 2, 3)
 
         self.date = hildon.DateButton(
             gtk.HILDON_SIZE_FINGER_HEIGHT,
             hildon.BUTTON_ARRANGEMENT_VERTICAL)
-        table.attach(self.date, 0, 1, 2, 3)
+        table.attach(self.date, 1, 2, 2, 3)
 
         self.time = hildon.TimeButton(
             gtk.HILDON_SIZE_FINGER_HEIGHT,
             hildon.BUTTON_ARRANGEMENT_VERTICAL)
-        table.attach(self.time, 1, 2, 2, 3)
+        table.attach(self.time, 2, 3, 2, 3)
 
         submit = hildon.Button(gtk.HILDON_SIZE_FINGER_HEIGHT,
             hildon.BUTTON_ARRANGEMENT_VERTICAL,
             title = "Suche starten")
         submit.connect("clicked", self.search_activated)
-        table.attach(submit, 0, 2, 3, 4)
+        table.attach(submit, 0, 3, 3, 4)
 
         self.form.pack_start(table, False, False, 0)
         self.pan.add_with_viewport(self.form)
@@ -87,18 +99,19 @@ class SearchForm:
             if destination_city == "":
                 destination_city = self.DEFAULT_CITY
             self.request = backend.Request(
-                backend.Station(self.origin_station.get_text(), origin_city),
-                backend.Station(self.destination_station.get_text(), destination_city),
-                datetime.datetime(date[0], date[1]+1, date[2], time[0], time[1])
+                origin=backend.Station(self.origin_station.get_text(), origin_city),
+                destination=backend.Station(self.destination_station.get_text(), destination_city),
+                date=datetime.datetime(date[0], date[1]+1, date[2], time[0], time[1]),
+                deparr="dep" if self.deparr.get_active() == 0 else "arr"
             )
         except backend.AmbiguityException, e:
             self.amb = e
         except IOError:
-            gobject.idle_add(self.conic_handler)
+            gobject.idle_add(self.conic_handler, priority=gobject.PRIORITY_DEFAULT)
         except (AttributeError, TypeError):
             self.errmsg = 'Keine Haltestelle gefunden!'
         finally:
-            gobject.idle_add(self.present_results)
+            gobject.idle_add(self.present_results, priority=gobject.PRIORITY_DEFAULT)
 
     def conic_handler(self, connection = None, event = None):
         if not event:
@@ -150,19 +163,9 @@ class ResultView:
         self.win = hildon.StackableWindow()
         self.win.set_title("BSAG Fahrten")
 
+        self.box = gtk.VBox()
         self.pan = hildon.PannableArea()
         self.listmodel = gtk.ListStore(str, str, str, str, int)
-
-        i = 0
-        for route in self.req.routes:
-            self.listmodel.append([
-                route.origin()[1].strftime("%H:%M"),
-                ", ".join([s["line_type"]+' '+s["line"] for s in route.sections]),
-                route.destination()[1].strftime("%H:%M"),
-                '%d:%02d' % (route.duration().seconds/3600, (route.duration().seconds%3600)/60),
-                i
-            ])
-            i += 1
 
         self.listview = hildon.GtkTreeView(gtk.HILDON_UI_MODE_NORMAL)
         self.listview.set_model(self.listmodel)
@@ -194,8 +197,56 @@ class ResultView:
         self.listview.append_column(self.duration_column)
 
         self.pan.add_with_viewport(self.listview)
-        self.win.add(self.pan)
+
+        if hasattr(self.req, "earlier") or hasattr(self.req, "later"):
+            hbox = gtk.HBox()
+            if hasattr(self.req, "earlier"):
+                earlier_button = hildon.Button(gtk.HILDON_SIZE_FINGER_HEIGHT,
+                    hildon.BUTTON_ARRANGEMENT_VERTICAL,
+                    title = "Früher")
+                earlier_button.connect("clicked", self.alter_req, self.req.earlier)
+                hbox.pack_start(earlier_button, True)
+
+
+            if hasattr(self.req, "later"):
+                later_button = hildon.Button(gtk.HILDON_SIZE_FINGER_HEIGHT,
+                    hildon.BUTTON_ARRANGEMENT_VERTICAL,
+                    title = "Später")
+                later_button.connect("clicked", self.alter_req, self.req.later)
+                hbox.pack_end(later_button, True)
+
+            self.box.pack_end(hbox, False)
+
+        self.box.pack_start(self.pan)
+
+
+        self.rebuild_model()
+
+        self.win.add(self.box)
         self.win.show_all()
+
+    def rebuild_model(self):
+        self.listmodel.clear()
+        i = 0
+        for route in self.req.routes:
+            self.listmodel.append([
+                route.origin()[1].strftime("%H:%M"),
+                ", ".join([s["line_type"]+' '+s["line"] for s in route.sections]),
+                route.destination()[1].strftime("%H:%M"),
+                '%d:%02d' % (route.duration().seconds/3600, (route.duration().seconds%3600)/60),
+                i
+            ])
+            i += 1
+        hildon.hildon_gtk_window_set_progress_indicator(self.win, 0)
+
+    def alter_req(self, button, func):
+        if button:
+            thread = Thread(target=self.alter_req, args=(None, func))
+            thread.start()
+            hildon.hildon_gtk_window_set_progress_indicator(self.win, 1)
+        else:
+            self.req = func()
+            gobject.idle_add(self.rebuild_model, priority=gobject.PRIORITY_DEFAULT)
 
     def activated(self, view, path, col):
         RouteView(self.req.routes[path[0]])

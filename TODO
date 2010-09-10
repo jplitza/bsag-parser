@@ -1,19 +1,18 @@
 These are some ideas that might or might not get implemented some time...
 
 GUI:
-* add i18n
-* portrait mode
-* later/earlier function
 * more info on route page
+* favourites
 * "link" to result page
 * configurable defaults
-* dep/arr selection
+* add i18n
+* portrait mode
 * add times to calendar/alarm
 
 Widget:
 * create it
 
 Backend:
-* later/earlier function
 * discover more error msgs
 * support realtime
+* fix dates

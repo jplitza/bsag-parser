@@ -74,34 +74,41 @@ class Route:
         self.sections.append(section)
 
 class Request:
-    def __init__(self, origin, destination, date, deparr = 'dep'):
-        self.origin = origin
-        self.destination = destination
-        self.date = date
-        self.deparr = deparr
+    def __init__(self, **kwargs):
+        if kwargs.has_key('origin') and kwargs.has_key('destination'):
+            origin = kwargs['origin']
+            destination = kwargs['destination']
+            self.date = kwargs.get('date', datetime.now())
+            deparr = kwargs.get('deparr', 'dep')
 
-        post = urllib.urlencode({
-            'language': 'de',
-            'sessionID': '0',
-            'useRealtime': '0',
-            'place_origin': self.origin.city,
-            'name_origin': self.origin.station,
-            'place_destination': self.destination.city,
-            'name_destination': self.destination.station,
-            'type_origin': 'stop',
-            'type_destination': 'stop',
-            'nameState_origin': 'empty',
-            'nameState_destination': 'empty',
-            'itdTripDateTimeDepArr': deparr,
-            'itdTimeHour': date.hour,
-            'itdTimeMinute': date.minute,
-            'itddateDay': date.day,
-            'itddateMonth': date.month,
-            'itddateYear': date.year,
-            'simple': 'Suche starten'
-        })
+            self.post = {
+                'language': 'de',
+                'sessionID': '0',
+                'useRealtime': '0',
+                'place_origin': origin.city,
+                'name_origin': origin.station,
+                'place_destination': destination.city,
+                'name_destination': destination.station,
+                'type_origin': 'stop',
+                'type_destination': 'stop',
+                'nameState_origin': 'empty',
+                'nameState_destination': 'empty',
+                'itdTripDateTimeDepArr': deparr,
+                'itdTimeHour': self.date.hour,
+                'itdTimeMinute': self.date.minute,
+                'itddateDay': self.date.day,
+                'itddateMonth': self.date.month,
+                'itddateYear': self.date.year,
+                'simple': 'Suche starten'
+            }
+        elif kwargs.has_key('post'):
+            # do we need separate URLs? I doubt it...
+            self.post = kwargs['post']
+            self.date = kwargs.get('date', datetime.now())
+        else:
+            raise TypeError('either "origin" and "destination" or "post" have to be provided')
 
-        ret = urllib.urlopen(_REQ_URL, post)
+        ret = urllib.urlopen(_REQ_URL, urllib.urlencode(self.post))
         self.html = ret.read()
         self.soup = BeautifulSoup(self.html.replace('\xa0', ' '))
         try:
@@ -165,6 +172,27 @@ class Request:
             except IndexError:
                 pass
 
+    def create_post(self):
+        form = self.soup.find('form', attrs={"id": "jp"})
+        post = {}
+        for option in form('input', attrs={"name": lambda nam: nam and len(nam) > 0, "value": lambda val: val and len(val) > 0}):
+            post[option["name"]] = option["value"]
+        post["itdLPxx_view"] = ""
+        post["itdLPxx_ShowFare"] = ""
+        post["itdLPxx_view"] = ""
+        post["useRealtime"] = "0"
+        return post
+
+    def earlier(self):
+        post = self.create_post()
+        post["command"] = "tripPrev"
+        return Request(post=post)
+
+    def later(self):
+        post = self.create_post()
+        post["command"] = "tripNext"
+        return Request(post=post)
+
 if __name__ == '__main__':
     if len(sys.argv) == 1:
         print """Program usage:
@@ -180,7 +208,7 @@ if __name__ == '__main__':
             destination = Station("Hauptbahnhof", "Bremen")
         elif len(sys.argv) == 3:
             destination = Station(sys.argv[2], "Bremen" if sys.argv[2].find(', ') == -1 else None)
-    r = Request(origin, destination, datetime.now())
+    r = Request(origin=origin, destination=destination, date=datetime.now())
     i = 1
     for route in r.routes:
         print '%d. Fahrt, Dauer %s' % (i, route.duration())
