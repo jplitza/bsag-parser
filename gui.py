@@ -1,24 +1,25 @@
 #!/usr/bin/python
 
+import datetime
+from threading import Thread
 import gobject
 import gtk
 import hildon
-import datetime
+import conic
 import bsag as backend
-from threading import Thread
 
 gobject.threads_init()
 gtk.gdk.threads_init()
 
 class SearchForm:
-    # TODO: make default configurable
     DEFAULT_CITY = "Bremen"
 
-    def __init__(self):
+    def __init__(self, conic = None):
+        self.conic = conic
         self.program = hildon.Program.get_instance()
         self.win = hildon.StackableWindow()
         self.win.set_title("BSAG")
-        self.win.connect("destroy", gtk.main_quit, None)
+        self.win.connect("destroy", gtk.main_quit)
 
         self.pan = hildon.PannableArea()
         self.form = gtk.VBox()
@@ -92,10 +93,21 @@ class SearchForm:
             )
         except backend.AmbiguityException, e:
             self.amb = e
-        except AttributeError:
+        except IOError:
+            gobject.idle_add(self.conic_handler)
+        except (AttributeError, TypeError):
             self.errmsg = 'Keine Haltestelle gefunden!'
         finally:
             gobject.idle_add(self.present_results)
+
+    def conic_handler(self, connection = None, event = None):
+        if not event:
+            if self.conic:
+                # establish internet connection
+                self.conic.connect("connection-event", self.conic_handler)
+                assert(self.conic.request_connection(conic.CONNECT_FLAG_NONE))
+        elif event.get_status() == conic.STATUS_CONNECTED:
+            self.search_activated()
 
     @staticmethod
     def selector_from_list(l):
@@ -202,7 +214,7 @@ class RouteView:
         i = 0
         for section in route.sections:
             self.tab_add("ab "+section["origin_time"].strftime("%H:%M"), 0, i)
-            self.tab_add(unicode(section["origin_station"]), 1, i)
+            self.tab_add(section["origin_station"], 1, i)
             self.tab_add(section["line_type"]+' '+section['line'], 2, i)
 
             self.tab_add("an "+section["destination_time"].strftime("%H:%M"), 0, i+1)
@@ -221,9 +233,8 @@ class RouteView:
 
 
 def main():
-    gui = SearchForm()
-    #req = backend.Request(backend.Station("West"), backend.Station("Hbf"), datetime.datetime.now())
-    #gui = ResultView(req)
+    # for some reason, conic.Connection has to be created before the MainLoop starts!
+    gui = SearchForm(conic.Connection())
     gtk.main()
 
 if __name__ == "__main__":

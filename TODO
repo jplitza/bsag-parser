@@ -1,3 +1,5 @@
+These are some ideas that might or might not get implemented some time...
+
 GUI:
 * add i18n
 * portrait mode
@@ -6,6 +8,7 @@ GUI:
 * "link" to result page
 * configurable defaults
 * dep/arr selection
+* add times to calendar/alarm
 
 Widget:
 * create it

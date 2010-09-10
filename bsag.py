@@ -71,7 +71,6 @@ class Route:
         return (self.sections[-1]['destination_station'], self.sections[-1]['destination_time'])
 
     def add_section(self, section):
-        # TODO: further checks if section is legal
         self.sections.append(section)
 
 class Request:
@@ -165,14 +164,6 @@ class Request:
                     section = {}
             except IndexError:
                 pass
-
-    def later(self):
-        # TODO
-        pass
-
-    def earlier(self):
-        # TODO
-        pass
 
 if __name__ == '__main__':
     if len(sys.argv) == 1:
