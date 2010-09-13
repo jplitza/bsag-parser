@@ -208,11 +208,16 @@ if __name__ == '__main__':
             destination = Station("Hauptbahnhof", "Bremen")
         elif len(sys.argv) == 3:
             destination = Station(sys.argv[2], "Bremen" if sys.argv[2].find(', ') == -1 else None)
-    r = Request(origin=origin, destination=destination, date=datetime.now())
-    i = 1
-    for route in r.routes:
-        print '%d. Fahrt, Dauer %s' % (i, route.duration())
-        for section in route.sections:
-            print u'  %s\tab\t%-40s\t%s %s' % (section['origin_time'].strftime('%H:%M'), unicode(section['origin_station']), section['line_type'], section['line'])
-            print u'  %s\tan\t%-40s' % (section['destination_time'].strftime('%H:%M'), unicode(section['destination_station']))
-        i += 1
+    try:
+        r = Request(origin=origin, destination=destination, date=datetime.now())
+        i = 1
+        for route in r.routes:
+            print '%d. Fahrt, Dauer %s' % (i, route.duration())
+            for section in route.sections:
+                print u'  %s\tab\t%-40s\t%s %s' % (section['origin_time'].strftime('%H:%M'), unicode(section['origin_station']), section['line_type'], section['line'])
+                print u'  %s\tan\t%-40s' % (section['destination_time'].strftime('%H:%M'), unicode(section['destination_station']))
+            i += 1
+    except AmbiguityException, e:
+        print '%s war nicht eindeutig. Möglichkeiten:' % e.field
+        for option in e.options:
+            print ' * %s' % option
