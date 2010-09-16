@@ -5,14 +5,23 @@ from datetime import datetime, timedelta
 import urllib
 import re
 import sys
-from BeautifulSoup import BeautifulSoup, SoupStrainer
+from lxml import html
 
 _REQ_URL = "http://62.206.133.180/bsag/XSLT_TRIP_REQUEST2?language=de&itdLPxx_transpCompany=bsag"
-_DEBUG = False
 
-def checkpoint(name, p = True):
-    if _DEBUG:
-        print '%s: backend: %s' % (datetime.now().time(), name)
+def find_attrs(etree, tag, attrs):
+    elements = etree.iterfind('.//'+tag)
+    matches = []
+    for element in elements:
+        for (key, value) in attrs.iteritems():
+            if callable(value):
+                if not value(element.get(key)):
+                    break
+            elif element.get(key) != value:
+                break
+        else:
+            matches.append(element)
+    return matches
 
 class AmbiguityException(Exception):
     def __init__(self, field, options = []):
@@ -72,6 +81,9 @@ class Route(list):
     def destination(self):
         return (self[-1]['destination_station'], self[-1]['destination_time'])
 
+def echo(foo):
+    print foo
+
 class Request:
     def __init__(self, **kwargs):
         if kwargs.has_key('origin') and kwargs.has_key('destination'):
@@ -107,29 +119,25 @@ class Request:
         else:
             raise TypeError('either "origin" and "destination" or "post" have to be provided')
 
-        checkpoint('making request')
         ret = urllib.urlopen(_REQ_URL, urllib.urlencode(self.post))
-        checkpoint('replacing')
         self.html = ret.read().replace('\xa0', ' ')
-        checkpoint('parsing')
-        self.soup = BeautifulSoup(self.html, parseOnlyThese=SoupStrainer('form'))
+        self.xml = html.fromstring(self.html)
         try:
-            checkpoint('identifying table')
-            self.table = self.soup.find('a', attrs={'name': 'Trip1'}).parent.parent.parent
-        except AttributeError:
-            errmsg = self.soup.findAll('span', attrs={'class': 'errorTextBold'})
+            self.table = find_attrs(self.xml, 'a', {'name': 'Trip1'})[0].getparent().getparent().getparent()
+        except IndexError:
+            errmsg = find_attrs(self.xml, 'span', {'class': 'errorTextBold'})
             for msg in errmsg:
-                if len(msg) == len(msg('img')):
+                if not msg.text:
                     continue
-                select = msg.parent.parent.parent.find('select', size=lambda s: s > 1)
+                select = find_attrs(msg.getparent().getparent().getparent(), 'select', {'size': lambda s: s > 1})[0]
                 name_translation = {
                     'name_origin': 'origin_station',
                     'place_origin': 'origin_station',
                     'name_destination': 'destination_station',
                     'place_destination': 'destination_city',
                 }
-                field = name_translation[select['name']]
-                options = [option.string.strip() for option in select.findAll('option')]
+                field = name_translation[select.get('name')]
+                options = [option.text.strip() for option in select.findall('option')]
                 raise AmbiguityException(field, options)
             else:
                 raise
@@ -138,38 +146,37 @@ class Request:
         route = Route()
         section = {}
 
-        checkpoint('parsing trs')
-        for tr in self.table('tr'):
-            tds = tr('td')
+        for tr in self.table.findall('tr'):
+            tds = tr.findall('td')
 
             try:
                 if tds[0].get('class') == 'kaestchen':
                     if len(route) > 0:
                         self.routes.append(route)
                         route = Route()
-                elif tds[3].span.string == u'ab ':
+                elif tds[3].find('span').text == u'ab ':
                     # start of (new) route section
                     origin_time = datetime.combine(
                         self.date.date(),
-                        datetime.strptime(tds[1].span.string, '%H:%M').time()
+                        datetime.strptime(tds[1].find('span').text, '%H:%M').time()
                     )
                     if self.date - origin_time > timedelta(0, 0, 0, 0, 30):
                         origin_time += timedelta(1)
                     section = {
-                        'origin_station': Station(tds[4].span.string),
+                        'origin_station': Station(tds[4].find('span').text),
                         'origin_time': origin_time,
-                        'line': tds[7].span.string.split(' ')[1],
-                        'line_type': tds[7].span.string.split(' ')[0],
+                        'line': tds[7].find('span').text.split(' ')[1],
+                        'line_type': tds[7].find('span').text.split(' ')[0],
                     }
-                elif tds[3].span.string == u'an ':
+                elif tds[3].find('span').text == u'an ':
                     # destination of route section
                     destination_time = datetime.combine(
                         self.date.date(),
-                        datetime.strptime(tds[1].span.string, '%H:%M').time()
+                        datetime.strptime(tds[1].find('span').text, '%H:%M').time()
                     )
                     if destination_time < origin_time:
                         destination_time += timedelta(1)
-                    section['destination_station'] = Station(tds[4].span.string)
+                    section['destination_station'] = Station(tds[4].find('span').text)
                     section['destination_time'] = destination_time
                     route.append(section)
                     section = {}
@@ -178,8 +185,8 @@ class Request:
 
     def create_post(self):
         post = {}
-        for option in self.soup('input', attrs={"name": lambda nam: nam and len(nam) > 0, "value": lambda val: val and len(val) > 0}):
-            post[option["name"]] = option["value"]
+        for option in find_attrs(self.xml, 'input', {"name": lambda nam: nam and len(nam) > 0, "value": lambda val: val and len(val) > 0}):
+            post[option.get("name")] = option.get("value")
         post["itdLPxx_view"] = ""
         post["itdLPxx_ShowFare"] = ""
         post["itdLPxx_view"] = ""
