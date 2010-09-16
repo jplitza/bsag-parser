@@ -231,7 +231,7 @@ class ResultView:
         for route in self.req.routes:
             self.listmodel.append([
                 route.origin()[1].strftime("%H:%M"),
-                ", ".join([s["line_type"]+' '+s["line"] for s in route.sections]),
+                ", ".join([s["line_type"]+' '+s["line"] for s in route]),
                 route.destination()[1].strftime("%H:%M"),
                 '%d:%02d' % (route.duration().seconds/3600, (route.duration().seconds%3600)/60),
                 i
@@ -260,10 +260,10 @@ class RouteView:
         self.pan = hildon.PannableArea()
         self.box = gtk.VBox()
         ROWS_PER_SECTION = 3
-        self.table = gtk.Table(3, len(route.sections)*ROWS_PER_SECTION)
+        self.table = gtk.Table(3, len(route)*ROWS_PER_SECTION)
 
         i = 0
-        for section in route.sections:
+        for section in route:
             self.tab_add("ab "+section["origin_time"].strftime("%H:%M"), 0, i)
             self.tab_add(section["origin_station"], 1, i)
             self.tab_add(section["line_type"]+' '+section['line'], 2, i)

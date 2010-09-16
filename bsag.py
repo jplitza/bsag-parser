@@ -1,13 +1,18 @@
 #!/usr/bin/python
 # -*- coding: utf-8 -*-
 
-from datetime import datetime, time, timedelta
+from datetime import datetime, timedelta
 import urllib
 import re
 import sys
-from BeautifulSoup import BeautifulSoup
+from BeautifulSoup import BeautifulSoup, SoupStrainer
 
 _REQ_URL = "http://62.206.133.180/bsag/XSLT_TRIP_REQUEST2?language=de&itdLPxx_transpCompany=bsag"
+_DEBUG = False
+
+def checkpoint(name, p = True):
+    if _DEBUG:
+        print '%s: backend: %s' % (datetime.now().time(), name)
 
 class AmbiguityException(Exception):
     def __init__(self, field, options = []):
@@ -43,35 +48,29 @@ class Station:
     def __repr__(self):
         return 'Station(%s, %s)' % (repr(self.station), repr(self.city))
 
-class Route:
+class Route(list):
     """
     A complete route from one station to another, possibly
     containing multiple sections.
     """
-    def __init__(self):
-        self.sections = []
-
     def __unicode__(self):
         if len(self.sections) == 0:
             return "Unknown route"
-        start = self.sections[0]['origin_station']
-        goal = self.sections[-1]['destination_station']
-        return "Route from %s to %s using %s" % (start, goal, ', '.join([section['line_type']+' '+section['line'] for section in self.sections]))
+        start = self.origin()[0]
+        goal = self.destionation()[0]
+        return "Route from %s to %s using %s" % (start, goal, ', '.join([section['line_type']+' '+section['line'] for section in self]))
 
     def __str__(self):
         return unicode(self).encode('utf-8')
 
     def duration(self):
-        return self.sections[-1]['destination_time'] - self.sections[0]['origin_time']
+        return self[-1]['destination_time'] - self[0]['origin_time']
 
     def origin(self):
-        return (self.sections[0]['origin_station'], self.sections[0]['origin_time'])
+        return (self[0]['origin_station'], self[0]['origin_time'])
 
     def destination(self):
-        return (self.sections[-1]['destination_station'], self.sections[-1]['destination_time'])
-
-    def add_section(self, section):
-        self.sections.append(section)
+        return (self[-1]['destination_station'], self[-1]['destination_time'])
 
 class Request:
     def __init__(self, **kwargs):
@@ -108,11 +107,15 @@ class Request:
         else:
             raise TypeError('either "origin" and "destination" or "post" have to be provided')
 
+        checkpoint('making request')
         ret = urllib.urlopen(_REQ_URL, urllib.urlencode(self.post))
-        self.html = ret.read()
-        self.soup = BeautifulSoup(self.html.replace('\xa0', ' '))
+        checkpoint('replacing')
+        self.html = ret.read().replace('\xa0', ' ')
+        checkpoint('parsing')
+        self.soup = BeautifulSoup(self.html, parseOnlyThese=SoupStrainer('form'))
         try:
-            self.table = self.soup.find(attrs={'name': 'Trip1'}).parent.parent.parent
+            checkpoint('identifying table')
+            self.table = self.soup.find('a', attrs={'name': 'Trip1'}).parent.parent.parent
         except AttributeError:
             errmsg = self.soup.findAll('span', attrs={'class': 'errorTextBold'})
             for msg in errmsg:
@@ -135,12 +138,13 @@ class Request:
         route = Route()
         section = {}
 
+        checkpoint('parsing trs')
         for tr in self.table('tr'):
             tds = tr('td')
 
             try:
-                if tds[0].has_key('class') and tds[0]['class'] == 'kaestchen':
-                    if len(route.sections) > 0:
+                if tds[0].get('class') == 'kaestchen':
+                    if len(route) > 0:
                         self.routes.append(route)
                         route = Route()
                 elif tds[3].span.string == u'ab ':
@@ -167,15 +171,14 @@ class Request:
                         destination_time += timedelta(1)
                     section['destination_station'] = Station(tds[4].span.string)
                     section['destination_time'] = destination_time
-                    route.add_section(section)
+                    route.append(section)
                     section = {}
             except IndexError:
                 pass
 
     def create_post(self):
-        form = self.soup.find('form', attrs={"id": "jp"})
         post = {}
-        for option in form('input', attrs={"name": lambda nam: nam and len(nam) > 0, "value": lambda val: val and len(val) > 0}):
+        for option in self.soup('input', attrs={"name": lambda nam: nam and len(nam) > 0, "value": lambda val: val and len(val) > 0}):
             post[option["name"]] = option["value"]
         post["itdLPxx_view"] = ""
         post["itdLPxx_ShowFare"] = ""
@@ -213,7 +216,7 @@ if __name__ == '__main__':
         i = 1
         for route in r.routes:
             print '%d. Fahrt, Dauer %s' % (i, route.duration())
-            for section in route.sections:
+            for section in route:
                 print u'  %s\tab\t%-40s\t%s %s' % (section['origin_time'].strftime('%H:%M'), unicode(section['origin_station']), section['line_type'], section['line'])
                 print u'  %s\tan\t%-40s' % (section['destination_time'].strftime('%H:%M'), unicode(section['destination_station']))
             i += 1
