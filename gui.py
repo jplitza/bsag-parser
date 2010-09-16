@@ -14,6 +14,12 @@ gtk.gdk.threads_init()
 
 class SearchForm:
     DEFAULT_CITY = "Bremen"
+    FAVOURITES = [
+        backend.Station('Westerstraße', 'Bremen'),
+        backend.Station('Brüsseler Straße', 'Bremen'),
+        backend.Station('Hauptbahnhof', 'Bremen'),
+        backend.Station('Universität Zentralbereich', 'Bremen'),
+    ]
 
     def __init__(self, conic = None):
         self.conic = conic
@@ -26,11 +32,12 @@ class SearchForm:
         self.form = gtk.VBox()
         table = gtk.Table(3, 4, False)
 
+
         self.origin_station = hildon.Entry(
             gtk.HILDON_SIZE_FINGER_HEIGHT)
         self.origin_station.connect("activate", self.search_activated)
         self.origin_station.set_placeholder("Starthaltestelle")
-        table.attach(self.origin_station, 0, 2, 0, 1)
+        table.attach(self.origin_station, 1, 2, 0, 1)
 
         self.origin_city = hildon.Entry(
             gtk.HILDON_SIZE_FINGER_HEIGHT)
@@ -38,17 +45,29 @@ class SearchForm:
         self.origin_city.set_placeholder("Stadt (Bremen)")
         table.attach(self.origin_city, 2, 3, 0, 1)
 
+        depfav = hildon.Button(gtk.HILDON_SIZE_FINGER_HEIGHT,
+            hildon.BUTTON_ARRANGEMENT_VERTICAL,
+            title = "Fav.")
+        depfav.connect("clicked", self.favourite_selector, (self.origin_station, self.origin_city))
+        table.attach(depfav, 0, 1, 0, 1)
+
         self.destination_station = hildon.Entry(
             gtk.HILDON_SIZE_FINGER_HEIGHT)
         self.destination_station.connect("activate", self.search_activated)
         self.destination_station.set_placeholder("Zielhaltestelle")
-        table.attach(self.destination_station, 0, 2, 1, 2)
+        table.attach(self.destination_station, 1, 2, 1, 2)
 
         self.destination_city = hildon.Entry(
             gtk.HILDON_SIZE_FINGER_HEIGHT)
         self.destination_city.connect("activate", self.search_activated)
         self.destination_city.set_placeholder("Stadt (Bremen)")
         table.attach(self.destination_city, 2, 3, 1, 2)
+
+        arrfav = hildon.Button(gtk.HILDON_SIZE_FINGER_HEIGHT,
+            hildon.BUTTON_ARRANGEMENT_VERTICAL,
+            title = "Fav.")
+        arrfav.connect("clicked", self.favourite_selector, (self.destination_station, self.destination_city))
+        table.attach(arrfav, 0, 1, 1, 2)
 
         self.deparr = hildon.PickerButton(
             gtk.HILDON_SIZE_FINGER_HEIGHT,
@@ -155,6 +174,20 @@ class SearchForm:
         self.picker_dialog.destroy()
         del self.picker_dialog
         self.search_activated()
+
+    def favourite_selector(self, widget, target):
+        self.favourite_dialog = hildon.PickerDialog(self.win)
+        selector = self.selector_from_list(self.FAVOURITES)
+        self.favourite_dialog.set_selector(selector)
+        selector.connect("changed", self.select_favourite, target)
+        self.favourite_dialog.set_title("Favorit auswählen")
+        self.favourite_dialog.show_all()
+
+    def select_favourite(self, widget, data, field):
+        field[0].set_text(self.FAVOURITES[widget.get_active(0)].station)
+        field[1].set_text(self.FAVOURITES[widget.get_active(0)].city)
+        self.favourite_dialog.destroy()
+        del self.favourite_dialog
 
 class ResultView:
     def __init__(self, req):
