@@ -95,7 +95,7 @@ class Request:
             self.post = {
                 'language': 'de',
                 'sessionID': '0',
-                'useRealtime': '0',
+                'useRealtime': '1',
                 'place_origin': origin.city,
                 'name_origin': origin.station,
                 'place_destination': destination.city,
@@ -120,6 +120,7 @@ class Request:
             raise TypeError('either "origin" and "destination" or "post" have to be provided')
 
         ret = urllib.urlopen(_REQ_URL, urllib.urlencode(self.post))
+        # unneccessary outside of HTML and confuses 'if's
         self.html = ret.read().replace('\xa0', ' ')
         self.xml = html.fromstring(self.html)
         try:
@@ -190,7 +191,6 @@ class Request:
         post["itdLPxx_view"] = ""
         post["itdLPxx_ShowFare"] = ""
         post["itdLPxx_view"] = ""
-        post["useRealtime"] = "0"
         return post
 
     def earlier(self):
