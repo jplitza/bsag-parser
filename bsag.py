@@ -81,9 +81,6 @@ class Route(list):
     def destination(self):
         return (self[-1]['destination_station'], self[-1]['destination_time'])
 
-def echo(foo):
-    print foo
-
 class Request:
     def __init__(self, **kwargs):
         if kwargs.has_key('origin') and kwargs.has_key('destination'):
@@ -130,16 +127,19 @@ class Request:
             for msg in errmsg:
                 if not msg.text:
                     continue
-                select = find_attrs(msg.getparent().getparent().getparent(), 'select', {'size': lambda s: s > 1})[0]
-                name_translation = {
-                    'name_origin': 'origin_station',
-                    'place_origin': 'origin_station',
-                    'name_destination': 'destination_station',
-                    'place_destination': 'destination_city',
-                }
-                field = name_translation[select.get('name')]
-                options = [option.text.strip() for option in select.findall('option')]
-                raise AmbiguityException(field, options)
+                try:
+                    select = find_attrs(msg.getparent().getparent().getparent(), 'select', {'size': lambda s: s > 1})[0]
+                    name_translation = {
+                        'name_origin': 'origin_station',
+                        'place_origin': 'origin_station',
+                        'name_destination': 'destination_station',
+                        'place_destination': 'destination_city',
+                    }
+                    field = name_translation[select.get('name')]
+                    options = [option.text.strip() for option in select.findall('option')]
+                    raise AmbiguityException(field, options)
+                except:
+                    raise Exception(msg.text)
             else:
                 raise
 
@@ -163,11 +163,17 @@ class Request:
                     )
                     if self.date - origin_time > timedelta(0, 0, 0, 0, 30):
                         origin_time += timedelta(1)
+                    try:
+                        delay = tds[8].find('.//span').find('span').text
+                        delay = int(delay[0:delay.find(' ')])
+                    except (AttributeError, ValueError):
+                        delay = 0
                     section = {
                         'origin_station': Station(tds[4].find('span').text),
                         'origin_time': origin_time,
                         'line': tds[7].find('span').text.split(' ')[1],
                         'line_type': tds[7].find('span').text.split(' ')[0],
+                        'delay': delay,
                     }
                 elif tds[3].find('span').text == u'an ':
                     # destination of route section
@@ -203,6 +209,12 @@ class Request:
         post["command"] = "tripNext"
         return Request(post=post)
 
+    def get_url(self):
+        return (_REQ_URL
+          + ('&' if _REQ_URL.find('?') > -1 else '?')
+          + urllib.urlencode(self.post)
+        )
+
 if __name__ == '__main__':
     if len(sys.argv) == 1:
         print """Program usage:
@@ -224,8 +236,11 @@ if __name__ == '__main__':
         for route in r.routes:
             print '%d. Fahrt, Dauer %s' % (i, route.duration())
             for section in route:
-                print u'  %s\tab\t%-40s\t%s %s' % (section['origin_time'].strftime('%H:%M'), unicode(section['origin_station']), section['line_type'], section['line'])
-                print u'  %s\tan\t%-40s' % (section['destination_time'].strftime('%H:%M'), unicode(section['destination_station']))
+                print u'  %s\tab\t%-30s\t%s %s' % (section['origin_time'].strftime('%H:%M'), unicode(section['origin_station']), section['line_type'], section['line'])
+                if section['delay']:
+                    print u'  %s\tan\t%-30s\t%d Minuten verspätet' % (section['destination_time'].strftime('%H:%M'), unicode(section['destination_station']), section['delay'])
+                else:
+                    print u'  %s\tan\t%-30s' % (section['destination_time'].strftime('%H:%M'), unicode(section['destination_station']))
             i += 1
     except AmbiguityException, e:
         print '%s war nicht eindeutig. Möglichkeiten:' % e.field

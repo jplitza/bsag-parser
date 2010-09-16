@@ -3,16 +3,15 @@ These are some ideas that might or might not get implemented some time...
 GUI:
 * more info on route page
 * favourites
-* "link" to result page
 * configurable defaults
 * add i18n
 * portrait mode
 * add times to calendar/alarm
+* fix disambiguity resolver for loops (see "München")
 
 Widget:
 * create it
 
 Backend:
 * discover more error msgs
-* support realtime
 * fix dates

@@ -4,6 +4,7 @@
 import datetime
 from threading import Thread
 import gobject
+import dbus
 import gtk
 import hildon
 import conic
@@ -36,6 +37,7 @@ class SearchForm:
         self.origin_station = hildon.Entry(
             gtk.HILDON_SIZE_FINGER_HEIGHT)
         self.origin_station.connect("activate", self.search_activated)
+        self.origin_station.connect("changed", self.lock_submit)
         self.origin_station.set_placeholder("Starthaltestelle")
         table.attach(self.origin_station, 1, 2, 0, 1)
 
@@ -54,6 +56,7 @@ class SearchForm:
         self.destination_station = hildon.Entry(
             gtk.HILDON_SIZE_FINGER_HEIGHT)
         self.destination_station.connect("activate", self.search_activated)
+        self.destination_station.connect("changed", self.lock_submit)
         self.destination_station.set_placeholder("Zielhaltestelle")
         table.attach(self.destination_station, 1, 2, 1, 2)
 
@@ -90,17 +93,23 @@ class SearchForm:
             hildon.BUTTON_ARRANGEMENT_VERTICAL)
         table.attach(self.time, 2, 3, 2, 3)
 
-        submit = hildon.Button(gtk.HILDON_SIZE_FINGER_HEIGHT,
+        self.submit = hildon.Button(gtk.HILDON_SIZE_FINGER_HEIGHT,
             hildon.BUTTON_ARRANGEMENT_VERTICAL,
             title = "Suche starten")
-        submit.connect("clicked", self.search_activated)
-        table.attach(submit, 0, 3, 3, 4)
+        self.submit.connect("clicked", self.search_activated)
+        table.attach(self.submit, 0, 3, 3, 4)
+        self.lock_submit(None)
 
         self.form.pack_start(table, False, False, 0)
         self.pan.add_with_viewport(self.form)
         self.win.add(self.pan)
 
         self.win.show_all()
+
+    def lock_submit(self, widget):
+        self.submit.set_sensitive(
+            self.origin_station.get_text() != "" and self.destination_station.get_text() != ""
+        )
 
     def search_activated(self, widget = None):
         thread = Thread(target=self.do_search)
@@ -231,6 +240,12 @@ class ResultView:
 
         self.pan.add_with_viewport(self.listview)
 
+        url_button = hildon.Button(gtk.HILDON_SIZE_AUTO_HEIGHT,
+            hildon.BUTTON_ARRANGEMENT_VERTICAL,
+            title = "Im Browser öffnen")
+        url_button.connect("clicked", self.browser)
+        self.box.pack_end(url_button, False)
+
         if hasattr(self.req, "earlier") or hasattr(self.req, "later"):
             hbox = gtk.HBox()
             if hasattr(self.req, "earlier"):
@@ -284,6 +299,12 @@ class ResultView:
     def activated(self, view, path, col):
         RouteView(self.req.routes[path[0]])
 
+    def browser(self, button):
+        bus = dbus.SessionBus()
+        proxy_obj = bus.get_object('com.nokia.osso_browser', '/com/nokia/osso_browser/request')
+        dbus_iface = dbus.Interface(proxy_obj, 'com.nokia.osso_browser')
+        dbus_iface.load_url(self.req.get_url())
+
 class RouteView:
     def __init__(self, route):
         self.program = hildon.Program.get_instance()
@@ -303,6 +324,8 @@ class RouteView:
 
             self.tab_add("an "+section["destination_time"].strftime("%H:%M"), 0, i+1)
             self.tab_add(section["destination_station"], 1, i+1)
+            if section.get('delay'):
+                self.tab_add("%d Min. verspätet" % section['delay'], 2, i+1)
             self.table.attach(gtk.HSeparator(), 0, 3, i+2, i+3)
 
             i += ROWS_PER_SECTION
