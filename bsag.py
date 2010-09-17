@@ -187,7 +187,7 @@ class Request:
                     section['destination_time'] = destination_time
                     route.append(section)
                     section = {}
-            except IndexError:
+            except (IndexError, AttributeError):
                 pass
 
     def create_post(self):
