@@ -138,6 +138,8 @@ class Request:
                     field = name_translation[select.get('name')]
                     options = [option.text.strip() for option in select.findall('option')]
                     raise AmbiguityException(field, options)
+                except AmbiguityException:
+                    raise
                 except:
                     raise Exception(msg.text)
             else:
