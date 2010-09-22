@@ -24,6 +24,8 @@ class SearchForm:
 
     def __init__(self, conic = None):
         self.conic = conic
+        # TODO: do this nice
+        favicon = "/usr/share/icons/hicolor/48x48/hildon/general_mybookmarks_folder.png"
         self.program = hildon.Program.get_instance()
         self.win = hildon.StackableWindow()
         self.win.set_title("BSAG")
@@ -49,9 +51,10 @@ class SearchForm:
 
         depfav = hildon.Button(gtk.HILDON_SIZE_FINGER_HEIGHT,
             hildon.BUTTON_ARRANGEMENT_VERTICAL,
-            title = "Fav.")
+            title = "")
+        depfav.set_image(gtk.image_new_from_file(favicon))
         depfav.connect("clicked", self.favourite_selector, (self.origin_station, self.origin_city))
-        table.attach(depfav, 0, 1, 0, 1)
+        table.attach(depfav, 0, 1, 0, 1, gtk.FILL, gtk.FILL)
 
         self.destination_station = hildon.Entry(
             gtk.HILDON_SIZE_FINGER_HEIGHT)
@@ -68,9 +71,10 @@ class SearchForm:
 
         arrfav = hildon.Button(gtk.HILDON_SIZE_FINGER_HEIGHT,
             hildon.BUTTON_ARRANGEMENT_VERTICAL,
-            title = "Fav.")
+            title = "")
+        arrfav.set_image(gtk.image_new_from_file(favicon))
         arrfav.connect("clicked", self.favourite_selector, (self.destination_station, self.destination_city))
-        table.attach(arrfav, 0, 1, 1, 2)
+        table.attach(arrfav, 0, 1, 1, 2, gtk.FILL, gtk.FILL)
 
         self.deparr = hildon.PickerButton(
             gtk.HILDON_SIZE_FINGER_HEIGHT,
@@ -81,16 +85,18 @@ class SearchForm:
         deparr_model.append(["an", "arr"])
         deparr_selector.append_text_column(deparr_model, True)
         self.deparr.set_selector(deparr_selector)
-        table.attach(self.deparr, 0, 1, 2, 3)
+        table.attach(self.deparr, 0, 1, 2, 3, gtk.FILL, gtk.FILL)
 
         self.date = hildon.DateButton(
             gtk.HILDON_SIZE_FINGER_HEIGHT,
             hildon.BUTTON_ARRANGEMENT_VERTICAL)
+        self.date.set_alignment(0, 0, 0, 0)
         table.attach(self.date, 1, 2, 2, 3)
 
         self.time = hildon.TimeButton(
             gtk.HILDON_SIZE_FINGER_HEIGHT,
             hildon.BUTTON_ARRANGEMENT_VERTICAL)
+        self.time.set_alignment(0, 0, 0, 0)
         table.attach(self.time, 2, 3, 2, 3)
 
         self.submit = hildon.Button(gtk.HILDON_SIZE_FINGER_HEIGHT,
