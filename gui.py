@@ -175,7 +175,7 @@ class SearchForm:
         elif hasattr(self, "amb"):
             if hasattr(self, self.amb.field):
                 self.picker_dialog = hildon.PickerDialog(self.win)
-                selector = self.selector_from_list(self.amb.options)
+                selector = self.selector_from_list([str(a) for a in self.amb.options])
                 self.picker_dialog.set_selector(selector)
                 selector.connect("changed", self.resolve_amb, self.amb.field)
                 self.picker_dialog.set_title(self.amb.field)

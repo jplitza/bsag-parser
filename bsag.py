@@ -30,10 +30,13 @@ def find_attrs(etree, tag, attrs):
 class AmbiguityException(Exception):
     def __init__(self, field, options = []):
         self.field = field
-        self.options = [unicode(op) for op in options]
+        self.options = [op for op in options]
 
     def __str__(self):
-        return unicode(self).encode('utf-8')
+        try:
+            return str(self.__unicode__(), 'ISO-8859-1')
+        except TypeError:
+            return unicode(self).encode('utf-8')
 
     def __unicode__(self):
         if len(self.options):
@@ -50,11 +53,10 @@ class Station:
         self.city = city
 
     def __str__(self):
-        u = self.__unicode__()
-        if u.__class__ == str:
-            return u
-        else:
-            return u.encode('utf-8')
+        try:
+            return str(self.__unicode__(), 'utf-8')
+        except TypeError:
+            return unicode(self).encode('utf-8')
 
     def __unicode__(self):
         if self.city and self.city != "":
@@ -78,7 +80,10 @@ class Route(list):
         return "Route from %s to %s using %s" % (start, goal, ', '.join([section['line_type']+' '+section['line'] for section in self]))
 
     def __str__(self):
-        return unicode(self).encode('utf-8')
+        try:
+            return str(self.__unicode__(), 'utf-8')
+        except TypeError:
+            return unicode(self).encode('utf-8')
 
     def duration(self):
         return self[-1]['destination_time'] - self[0]['origin_time']
@@ -144,7 +149,7 @@ class Request:
                 if not msg.text:
                     continue
                 try:
-                    select = find_attrs(msg.getparent().getparent().getparent(), 'select', {'size': lambda s: s > 1})[0]
+                    select = find_attrs(msg.getparent().getparent().getparent(), 'select', {'size': lambda s: int(s) > 1})[0]
                     name_translation = {
                         'name_origin': 'origin_station',
                         'place_origin': 'origin_station',
@@ -262,7 +267,8 @@ if __name__ == '__main__':
                 else:
                     print('  %s\tan\t%-30s' % (section['destination_time'].strftime('%H:%M'), section['destination_station']))
             i += 1
-    except AmbiguityException as e:
+    except AmbiguityException:
+        e = sys.exc_info()[1]
         print('%s war nicht eindeutig. Möglichkeiten:' % e.field)
         for option in e.options:
             print(' * %s' % option)
