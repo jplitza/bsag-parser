@@ -20,6 +20,7 @@ class SearchForm:
         backend.Station('Brüsseler Straße', 'Bremen'),
         backend.Station('Hauptbahnhof', 'Bremen'),
         backend.Station('Universität Zentralbereich', 'Bremen'),
+        backend.Station('Gastfeldstraße', 'Bremen'),
     ]
 
     def __init__(self, conic = None):
