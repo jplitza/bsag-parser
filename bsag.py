@@ -2,7 +2,11 @@
 # -*- coding: utf-8 -*-
 
 from datetime import datetime, timedelta
-import urllib
+try:
+    from urllib.request import urlopen
+    from urllib.parse import urlencode
+except ImportError:
+    from urllib import urlopen, urlencode
 import re
 import sys
 from lxml import html
@@ -13,8 +17,8 @@ def find_attrs(etree, tag, attrs):
     elements = etree.iterfind('.//'+tag)
     matches = []
     for element in elements:
-        for (key, value) in attrs.iteritems():
-            if callable(value):
+        for (key, value) in attrs.items():
+            if hasattr(value, '__call__'):
                 if not value(element.get(key)):
                     break
             elif element.get(key) != value:
@@ -33,9 +37,9 @@ class AmbiguityException(Exception):
 
     def __unicode__(self):
         if len(self.options):
-            return u"The field '%s' was ambigous, the following options were suggested: %s" % (self.field, u", ".join(self.options))
+            return "The field '%s' was ambigous, the following options were suggested: %s" % (self.field, ", ".join(self.options))
         else:
-            return u"The field '%s' was ambigous" % unicode(self.field)
+            return "The field '%s' was ambigous" % unicode(self.field)
 
 class Station:
     def __init__(self, station, city = None):
@@ -46,11 +50,15 @@ class Station:
         self.city = city
 
     def __str__(self):
-        return unicode(self).encode('utf-8')
+        u = self.__unicode__()
+        if u.__class__ == str:
+            return u
+        else:
+            return u.encode('utf-8')
 
     def __unicode__(self):
         if self.city and self.city != "":
-            return u"%s, %s" % (self.city, self.station)
+            return "%s, %s" % (self.city, self.station)
         else:
             return self.station
 
@@ -83,7 +91,7 @@ class Route(list):
 
 class Request:
     def __init__(self, **kwargs):
-        if kwargs.has_key('origin') and kwargs.has_key('destination'):
+        if 'origin' in kwargs and 'destination' in kwargs:
             origin = kwargs['origin']
             destination = kwargs['destination']
             self.date = kwargs.get('date', datetime.now())
@@ -109,16 +117,24 @@ class Request:
                 'itddateYear': self.date.year,
                 'simple': 'Suche starten'
             }
-        elif kwargs.has_key('post'):
+        elif 'post' in kwargs:
             # do we need separate URLs? I doubt it...
             self.post = kwargs['post']
             self.date = kwargs.get('date', datetime.now())
         else:
             raise TypeError('either "origin" and "destination" or "post" have to be provided')
 
-        ret = urllib.urlopen(_REQ_URL, urllib.urlencode(self.post))
+        ret = urlopen(_REQ_URL, urlencode(self.post))
         # unneccessary outside of HTML and confuses 'if's
-        self.html = ret.read().replace('\xa0', ' ')
+        r = ret.read()
+        try:
+            self.html = str(r, 'ISO-8859-1')
+        except TypeError:
+            self.html = unicode(r, 'ISO-8859-1')
+        try:
+            self.html = self.html.replace('\xa0', ' ')
+        except UnicodeDecodeError:
+            self.html = self.html.replace(unicode('\xa0', 'ISO-8859-1'), ' ')
         self.xml = html.fromstring(self.html)
         try:
             self.table = find_attrs(self.xml, 'a', {'name': 'Trip1'})[0].getparent().getparent().getparent()
@@ -157,7 +173,7 @@ class Request:
                     if len(route) > 0:
                         self.routes.append(route)
                         route = Route()
-                elif tds[3].find('span').text == u'ab ':
+                elif tds[3].find('span').text == 'ab ':
                     # start of (new) route section
                     origin_time = datetime.combine(
                         self.date.date(),
@@ -168,8 +184,10 @@ class Request:
                     try:
                         delay = tds[8].find('.//span').find('span').text
                         delay = int(delay[0:delay.find(' ')])
-                    except (AttributeError, ValueError):
+                    except (AttributeError, ValueError, IndexError):
                         delay = 0
+                    except:
+                        sys.excepthook(*sys.exc_info())
                     section = {
                         'origin_station': Station(tds[4].find('span').text),
                         'origin_time': origin_time,
@@ -177,7 +195,7 @@ class Request:
                         'line_type': tds[7].find('span').text.split(' ')[0],
                         'delay': delay,
                     }
-                elif tds[3].find('span').text == u'an ':
+                elif tds[3].find('span').text == 'an ':
                     # destination of route section
                     destination_time = datetime.combine(
                         self.date.date(),
@@ -219,12 +237,12 @@ class Request:
 
 if __name__ == '__main__':
     if len(sys.argv) == 1:
-        print """Program usage:
+        print("""Program usage:
     %s Starthaltestelle [Zielhaltestelle]
 
     Starthaltestelle: self-explaining
     Zielhaltestelle: self-explaining, optional. Default ist Hbf
-    """ % sys.argv[0]
+    """ % sys.argv[0])
         sys.exit()
     else:
         origin = Station(sys.argv[1], 'Bremen' if sys.argv[1].find(', ') == -1 else None)
@@ -236,15 +254,15 @@ if __name__ == '__main__':
         r = Request(origin=origin, destination=destination, date=datetime.now())
         i = 1
         for route in r.routes:
-            print '%d. Fahrt, Dauer %s' % (i, route.duration())
+            print('%d. Fahrt, Dauer %s' % (i, route.duration()))
             for section in route:
-                print u'  %s\tab\t%-30s\t%s %s' % (section['origin_time'].strftime('%H:%M'), unicode(section['origin_station']), section['line_type'], section['line'])
+                print('  %s\tab\t%-30s\t%s %s' % (section['origin_time'].strftime('%H:%M'), section['origin_station'], section['line_type'], section['line']))
                 if section['delay']:
-                    print u'  %s\tan\t%-30s\t%d Minuten verspätet' % (section['destination_time'].strftime('%H:%M'), unicode(section['destination_station']), section['delay'])
+                    print('  %s\tan\t%-30s\t%d Minuten verspätet' % (section['destination_time'].strftime('%H:%M'), section['destination_station'], section['delay']))
                 else:
-                    print u'  %s\tan\t%-30s' % (section['destination_time'].strftime('%H:%M'), unicode(section['destination_station']))
+                    print('  %s\tan\t%-30s' % (section['destination_time'].strftime('%H:%M'), section['destination_station']))
             i += 1
-    except AmbiguityException, e:
-        print '%s war nicht eindeutig. Möglichkeiten:' % e.field
+    except AmbiguityException as e:
+        print('%s war nicht eindeutig. Möglichkeiten:' % e.field)
         for option in e.options:
-            print ' * %s' % option
+            print(' * %s' % option)
