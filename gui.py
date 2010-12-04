@@ -104,7 +104,14 @@ class SearchForm:
             gtk.HILDON_SIZE_FINGER_HEIGHT,
             hildon.BUTTON_ARRANGEMENT_VERTICAL)
         self.time.set_alignment(0, 0, 0, 0)
-        table.attach(self.time, 2, 4, 2, 3)
+        table.attach(self.time, 2, 3, 2, 3)
+
+        self.now = hildon.GtkToggleButton(
+            gtk.HILDON_SIZE_FINGER_HEIGHT)
+        self.now.set_label("Jetzt")
+        self.now.connect("toggled", self.now_toggled)
+        self.now.set_active(True)
+        table.attach(self.now, 3, 4, 2, 3, gtk.FILL, gtk.FILL)
 
         self.submit = hildon.Button(gtk.HILDON_SIZE_FINGER_HEIGHT,
             hildon.BUTTON_ARRANGEMENT_VERTICAL,
@@ -131,8 +138,12 @@ class SearchForm:
 
     def do_search(self):
         try:
-            date = self.date.get_date()
-            time = self.time.get_time()
+            if self.now.get_active():
+                date = datetime.datetime.now()
+            else:
+                date = self.date.get_date()
+                time = self.time.get_time()
+                date = datetime.datetime(date[0], date[1]+1, date[2], time[0], time[1])
             origin_city = self.origin_city.get_text()
             if origin_city == "":
                 origin_city = self.DEFAULT_CITY
@@ -142,15 +153,15 @@ class SearchForm:
             self.request = backend.Request(
                 origin=backend.Station(self.origin_station.get_text(), origin_city),
                 destination=backend.Station(self.destination_station.get_text(), destination_city),
-                date=datetime.datetime(date[0], date[1]+1, date[2], time[0], time[1]),
+                date=date,
                 deparr="dep" if self.deparr.get_active() == 0 else "arr"
             )
         except backend.AmbiguityException, e:
             self.amb = e
         except IOError:
             gobject.idle_add(self.conic_handler, priority=gobject.PRIORITY_DEFAULT)
-        except (AttributeError, TypeError):
-            self.errmsg = 'Keine Haltestelle gefunden!'
+        #except (AttributeError, TypeError):
+        #    self.errmsg = 'Keine Haltestelle gefunden!'
         finally:
             gobject.idle_add(self.present_results, priority=gobject.PRIORITY_DEFAULT)
 
@@ -217,6 +228,15 @@ class SearchForm:
         self.origin_city.set_text(self.destination_city.get_text())
         self.destination_station.set_text(tmp[0])
         self.destination_city.set_text(tmp[1])
+
+    def now_toggled(self, widget):
+        active = widget.get_active()
+        self.date.set_sensitive(not active)
+        self.time.set_sensitive(not active)
+        if not active:
+            now = datetime.datetime.now()
+            self.date.set_date(now.year, now.month, now.day)
+            self.time.set_time(now.hour, now.minute)
 
 class ResultView:
     def __init__(self, req):
