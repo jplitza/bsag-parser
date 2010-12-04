@@ -34,7 +34,7 @@ class SearchForm:
 
         self.pan = hildon.PannableArea()
         self.form = gtk.VBox()
-        table = gtk.Table(3, 4, False)
+        table = gtk.Table(4, 4, False)
 
 
         self.origin_station = hildon.Entry(
@@ -77,6 +77,12 @@ class SearchForm:
         arrfav.connect("clicked", self.favourite_selector, (self.destination_station, self.destination_city))
         table.attach(arrfav, 0, 1, 1, 2, gtk.FILL, gtk.FILL)
 
+        switcher = hildon.Button(gtk.HILDON_SIZE_AUTO,
+            hildon.BUTTON_ARRANGEMENT_VERTICAL,
+            title = "<>")
+        switcher.connect("clicked", self.switch_deparr)
+        table.attach(switcher, 3, 4, 0, 2, gtk.FILL, gtk.FILL)
+
         self.deparr = hildon.PickerButton(
             gtk.HILDON_SIZE_FINGER_HEIGHT,
             hildon.BUTTON_ARRANGEMENT_VERTICAL)
@@ -98,13 +104,13 @@ class SearchForm:
             gtk.HILDON_SIZE_FINGER_HEIGHT,
             hildon.BUTTON_ARRANGEMENT_VERTICAL)
         self.time.set_alignment(0, 0, 0, 0)
-        table.attach(self.time, 2, 3, 2, 3)
+        table.attach(self.time, 2, 4, 2, 3)
 
         self.submit = hildon.Button(gtk.HILDON_SIZE_FINGER_HEIGHT,
             hildon.BUTTON_ARRANGEMENT_VERTICAL,
             title = "Suche starten")
         self.submit.connect("clicked", self.search_activated)
-        table.attach(self.submit, 0, 3, 3, 4)
+        table.attach(self.submit, 0, 4, 3, 4)
         self.lock_submit(None)
 
         self.form.pack_start(table, False, False, 0)
@@ -204,6 +210,13 @@ class SearchForm:
         field[1].set_text(self.FAVOURITES[widget.get_active(0)].city)
         self.favourite_dialog.destroy()
         del self.favourite_dialog
+
+    def switch_deparr(self, widget):
+        tmp = (self.origin_station.get_text(), self.origin_city.get_text())
+        self.origin_station.set_text(self.destination_station.get_text())
+        self.origin_city.set_text(self.destination_city.get_text())
+        self.destination_station.set_text(tmp[0])
+        self.destination_city.set_text(tmp[1])
 
 class ResultView:
     def __init__(self, req):
