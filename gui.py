@@ -5,7 +5,12 @@ import datetime
 from threading import Thread
 import gobject
 import dbus
+try:
+    import gconf
+except ImportError:
+    import gnome.gconf as gconf
 import gtk
+import gobject
 import hildon
 import conic
 import bsag as backend
@@ -14,23 +19,41 @@ gobject.threads_init()
 gtk.gdk.threads_init()
 
 class SearchForm:
-    DEFAULT_CITY = "Bremen"
-    FAVOURITES = [
-        backend.Station('Westerstraße', 'Bremen'),
-        backend.Station('Brüsseler Straße', 'Bremen'),
-        backend.Station('Hauptbahnhof', 'Bremen'),
-        backend.Station('Universität Zentralbereich', 'Bremen'),
-        backend.Station('Gastfeldstraße', 'Bremen'),
-    ]
+    GCONF_PATH = '/apps/bsag/'
 
     def __init__(self, conic = None):
         self.conic = conic
         # TODO: do this nice
         favicon = "/usr/share/icons/hicolor/48x48/hildon/general_mybookmarks_folder.png"
+
+        self.gconf = gconf.client_get_default()
+        if len(self.get_favourites()) == 0:
+            self.gconf.set_list(self.GCONF_PATH + 'favourites',
+                                gconf.VALUE_STRING,
+                                ['Bremen, Hauptbahnhof']
+                               )
+
+        self.default_station = self.gconf.get_string(self.GCONF_PATH + 'default_station')
+        if self.default_station == None:
+            self.gconf.set_string(self.GCONF_PATH + 'default_station', 'Hauptbahnhof')
+            self.default_station = 'Hauptbahnhof'
+
+        self.default_city = self.gconf.get_string(self.GCONF_PATH + 'default_city')
+        if self.default_city == None:
+            self.gconf.set_string(self.GCONF_PATH + 'default_city', 'Bremen')
+            self.default_city = 'Bremen'
+
         self.program = hildon.Program.get_instance()
         self.win = hildon.StackableWindow()
         self.win.set_title("BSAG")
         self.win.connect("destroy", gtk.main_quit)
+
+        menu = hildon.AppMenu()
+        settingsbutton = gtk.Button("Einstellungen")
+        settingsbutton.connect("clicked", self.settings_dialog)
+        menu.append(settingsbutton)
+        menu.show_all()
+        self.win.set_app_menu(menu)
 
         self.pan = hildon.PannableArea()
         self.form = gtk.VBox()
@@ -41,13 +64,11 @@ class SearchForm:
             gtk.HILDON_SIZE_FINGER_HEIGHT)
         self.origin_station.connect("activate", self.search_activated)
         self.origin_station.connect("changed", self.lock_submit)
-        self.origin_station.set_placeholder("Starthaltestelle")
         table.attach(self.origin_station, 1, 2, 0, 1)
 
         self.origin_city = hildon.Entry(
             gtk.HILDON_SIZE_FINGER_HEIGHT)
         self.origin_city.connect("activate", self.search_activated)
-        self.origin_city.set_placeholder("Stadt (Bremen)")
         table.attach(self.origin_city, 2, 3, 0, 1)
 
         depfav = hildon.Button(gtk.HILDON_SIZE_FINGER_HEIGHT,
@@ -67,8 +88,10 @@ class SearchForm:
         self.destination_city = hildon.Entry(
             gtk.HILDON_SIZE_FINGER_HEIGHT)
         self.destination_city.connect("activate", self.search_activated)
-        self.destination_city.set_placeholder("Stadt (Bremen)")
         table.attach(self.destination_city, 2, 3, 1, 2)
+
+        self.origin_city.connect("changed", self.placeholder_changer, self.destination_city, "Stadt (%s)", self.default_city)
+
 
         arrfav = hildon.Button(gtk.HILDON_SIZE_FINGER_HEIGHT,
             hildon.BUTTON_ARRANGEMENT_VERTICAL,
@@ -77,15 +100,10 @@ class SearchForm:
         arrfav.connect("clicked", self.favourite_selector, (self.destination_station, self.destination_city))
         table.attach(arrfav, 0, 1, 1, 2, gtk.FILL, gtk.FILL)
 
-        self.deparr = hildon.PickerButton(
-            gtk.HILDON_SIZE_FINGER_HEIGHT,
-            hildon.BUTTON_ARRANGEMENT_VERTICAL)
-        deparr_selector = hildon.TouchSelector()
-        deparr_model = gtk.ListStore(str, str)
-        deparr_model.append(["ab", "dep"])
-        deparr_model.append(["an", "arr"])
-        deparr_selector.append_text_column(deparr_model, True)
-        self.deparr.set_selector(deparr_selector)
+        self.deparr = hildon.GtkToggleButton(
+            gtk.HILDON_SIZE_FINGER_HEIGHT)
+        self.deparr.connect("clicked", lambda widget: widget.set_label("ab" if widget.get_active() else "an"))
+        self.deparr.set_active(True)
         table.attach(self.deparr, 0, 1, 2, 3, gtk.FILL, gtk.FILL)
 
         self.date = hildon.DateButton(
@@ -113,6 +131,20 @@ class SearchForm:
 
         self.win.show_all()
 
+    def placeholder_changer(self, widget, target, text, default):
+        target.set_placeholder(text % (widget.get_text() if len(widget.get_text()) > 0 else default))
+
+    def update_placeholders(self):
+        self.origin_station.set_placeholder("Starthaltestelle (%s)" % self.default_station)
+        self.origin_city.set_placeholder("Stadt (%s)" % self.default_city)
+        self.placeholder_changer(self.origin_city, self.destination_city, "Stadt (%s)", self.default_city)
+
+    def get_favourites(self):
+        return [backend.Station(name) for name in
+            self.gconf.get_list(self.GCONF_PATH + 'favourites',
+                                gconf.VALUE_STRING
+        )]
+
     def lock_submit(self, widget):
         self.submit.set_sensitive(
             self.origin_station.get_text() != "" and self.destination_station.get_text() != ""
@@ -129,15 +161,15 @@ class SearchForm:
             time = self.time.get_time()
             origin_city = self.origin_city.get_text()
             if origin_city == "":
-                origin_city = self.DEFAULT_CITY
+                origin_city = self.default_city
             destination_city = self.destination_city.get_text()
             if destination_city == "":
-                destination_city = self.DEFAULT_CITY
+                destination_city = self.default_city
             self.request = backend.Request(
                 origin=backend.Station(self.origin_station.get_text(), origin_city),
                 destination=backend.Station(self.destination_station.get_text(), destination_city),
                 date=datetime.datetime(date[0], date[1]+1, date[2], time[0], time[1]),
-                deparr="dep" if self.deparr.get_active() == 0 else "arr"
+                deparr="dep" if self.deparr.get_active() else "arr"
             )
         except backend.AmbiguityException, e:
             self.amb = e
@@ -159,12 +191,9 @@ class SearchForm:
 
     @staticmethod
     def selector_from_list(l):
-        selector = hildon.TouchSelector()
-        model = gtk.ListStore(str)
+        selector = hildon.TouchSelector(text = True)
         for item in l:
-            model.append([item])
-
-        selector.append_text_column(model, True)
+            selector.append_text(str(item))
         return selector
 
     def present_results(self):
@@ -193,17 +222,122 @@ class SearchForm:
 
     def favourite_selector(self, widget, target):
         self.favourite_dialog = hildon.PickerDialog(self.win)
-        selector = self.selector_from_list(self.FAVOURITES)
+        selector = self.selector_from_list(self.get_favourites())
         self.favourite_dialog.set_selector(selector)
         selector.connect("changed", self.select_favourite, target)
         self.favourite_dialog.set_title("Favorit auswählen")
         self.favourite_dialog.show_all()
 
     def select_favourite(self, widget, data, field):
-        field[0].set_text(self.FAVOURITES[widget.get_active(0)].station)
-        field[1].set_text(self.FAVOURITES[widget.get_active(0)].city)
+        (store, it) = widget.get_selected(0)
+        selected = backend.Station(store.get_value(it, 0))
+        field[0].set_text(selected.station)
+        field[1].set_text(selected.city)
         self.favourite_dialog.destroy()
         del self.favourite_dialog
+
+    def settings_dialog(self, widget = None):
+        self.SettingsDialog(self)
+
+    class SettingsDialog:
+        def __init__(self, parent):
+            self.dialog = gtk.Dialog("Einstellungen", parent.win, 0,
+                (gtk.STOCK_DELETE, 257, "Als Heimat", 258, gtk.STOCK_OK, gtk.RESPONSE_ACCEPT))
+
+            addicon = "/usr/share/icons/hicolor/48x48/hildon/general_add.png"
+            hbox = gtk.HBox()
+            new_favourite_station = hildon.Entry(gtk.HILDON_SIZE_FINGER_HEIGHT)
+            new_favourite_station.set_placeholder("Neuer Favorit")
+            hbox.pack_start(new_favourite_station)
+
+            new_favourite_city = hildon.Entry(gtk.HILDON_SIZE_FINGER_HEIGHT)
+            new_favourite_city.set_placeholder("Stadt (%s)" % parent.default_city)
+            hbox.pack_start(new_favourite_city)
+
+            new_favourite_button = hildon.Button(gtk.HILDON_SIZE_FINGER_HEIGHT,
+                hildon.BUTTON_ARRANGEMENT_VERTICAL,
+                title = "")
+            new_favourite_button.set_image(gtk.image_new_from_file(addicon))
+            new_favourite_button.connect("clicked", self.new_favourite,
+                    new_favourite_station, new_favourite_city)
+            hbox.pack_start(new_favourite_button, False)
+
+            new_favourite_station.connect("changed", self.lock_on_empty, new_favourite_button)
+            self.lock_on_empty(new_favourite_station, new_favourite_button)
+
+            self.dialog.vbox.pack_start(hbox)
+
+            self.selector = hildon.TouchSelector()
+            model = gtk.ListStore(str, gobject.TYPE_PYOBJECT)
+            for station in parent.get_favourites():
+                model.append([str(station), station])
+            self.selector.append_text_column(model, False)
+            self.selector.set_size_request(-1, 230)
+            self.selector.set_column_selection_mode(hildon.TOUCH_SELECTOR_SELECTION_MODE_MULTIPLE)
+            self.selector.unselect_all(0)
+            self.dialog.vbox.pack_start(self.selector)
+
+            self.home = gtk.Label("Heimat: %s, %s" % (parent.default_city, parent.default_station))
+            self.dialog.vbox.pack_start(self.home, False)
+
+            while True:
+                self.dialog.show_all()
+                response = self.dialog.run()
+                if response == gtk.RESPONSE_ACCEPT:
+                    favourites = []
+                    model = self.selector.get_model(0)
+                    i = model.get_iter_root()
+                    while i:
+                        favourites.append(model.get_value(i, 0))
+                        i = model.iter_next(i)
+                    parent.gconf.set_list(parent.GCONF_PATH + 'favourites',
+                                          gconf.VALUE_STRING,
+                                          favourites
+                                         )
+                elif response == 257:
+                    model = self.selector.get_model(0)
+                    for item in [gtk.TreeRowReference(model, path)
+                                    for path in self.selector.get_selected_rows(0)]:
+                        model.remove(model.get_iter(item.get_path()))
+
+                elif response == 258:
+                    selected = self.selector.get_selected_rows(0)
+                    if len(selected) == 0:
+                        hildon.hildon_banner_show_information(self.dialog, "", "Keine Haltestelle ausgewählt!")
+                    elif len(selected) > 1:
+                        hildon.hildon_banner_show_information(self.dialog, "", "Kann nur eine Haltestelle als Heimat setzen!")
+                    else:
+                        model = self.selector.get_model(0)
+                        station = model.get_value(model.get_iter(selected[0]), 1)
+
+                        parent.gconf.set_string(parent.GCONF_PATH + 'default_city', station.city)
+                        parent.default_city = station.city
+
+                        parent.gconf.set_string(parent.GCONF_PATH + 'default_station', station.station)
+                        parent.default_station = station.station
+
+                        parent.update_placeholders()
+
+                        self.home.set_text("Heimat: %s, %s" % (parent.default_city, parent.default_station))
+
+                        self.selector.unselect_all(0)
+                        hildon.hildon_banner_show_information(self.dialog, "", "Haltestelle als Heimat gespeichert.")
+
+                if response < 257:
+                    self.dialog.hide()
+                    self.dialog.destroy()
+                    break
+
+        def new_favourite(self, widget, station, city):
+            if len(station.get_text()) > 0:
+                if len(city.get_text()) > 0:
+                    obj = backend.Station(station.get_text(), city.get_text())
+                else:
+                    obj = backend.Station(station.get_text(), parent.default_city)
+                self.selector.get_model(0).append([str(obj), obj])
+
+        def lock_on_empty(self, widget, target):
+            target.set_sensitive(widget.get_text() != "")
 
 class ResultView:
     def __init__(self, req):
