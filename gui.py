@@ -259,6 +259,8 @@ class SearchForm:
 
     class SettingsDialog:
         def __init__(self, parent):
+            self.parent = parent
+
             self.dialog = gtk.Dialog("Einstellungen", parent.win, 0,
                 (gtk.STOCK_DELETE, 257, "Als Heimat", 258, gtk.STOCK_OK, gtk.RESPONSE_ACCEPT))
 
@@ -312,6 +314,8 @@ class SearchForm:
                                           gconf.VALUE_STRING,
                                           favourites
                                          )
+                    hildon.hildon_banner_show_information(self.dialog, "", "Favoriten gespeichert.")
+
                 elif response == 257:
                     model = self.selector.get_model(0)
                     for item in [gtk.TreeRowReference(model, path)
@@ -351,7 +355,7 @@ class SearchForm:
                 if len(city.get_text()) > 0:
                     obj = backend.Station(station.get_text(), city.get_text())
                 else:
-                    obj = backend.Station(station.get_text(), parent.default_city)
+                    obj = backend.Station(station.get_text(), self.parent.default_city)
                 self.selector.get_model(0).append([str(obj), obj])
 
     def switch_deparr(self, widget):
