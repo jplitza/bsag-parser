@@ -215,6 +215,9 @@ class Request:
             except (IndexError, AttributeError):
                 pass
 
+        if len(route) > 0:
+            self.routes.append(route)
+
     def create_post(self):
         post = {}
         for option in find_attrs(self.xml, 'input', {"name": lambda nam: nam and len(nam) > 0, "value": lambda val: val and len(val) > 0}):
