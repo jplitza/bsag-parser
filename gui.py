@@ -280,6 +280,10 @@ class SearchForm:
             new_favourite_button.set_image(gtk.image_new_from_file(addicon))
             new_favourite_button.connect("clicked", self.new_favourite,
                     new_favourite_station, new_favourite_city)
+            new_favourite_button.connect("activate", self.new_favourite,
+                    new_favourite_station, new_favourite_city)
+            new_favourite_button.connect("activate", self.new_favourite,
+                    new_favourite_station, new_favourite_city)
             hbox.pack_start(new_favourite_button, False)
 
             new_favourite_station.connect("changed", lock_on_empty, new_favourite_button)
@@ -314,7 +318,7 @@ class SearchForm:
                                           gconf.VALUE_STRING,
                                           favourites
                                          )
-                    hildon.hildon_banner_show_information(self.dialog, "", "Favoriten gespeichert.")
+                    hildon.hildon_banner_show_information(parent.win, "", "Favoriten gespeichert.")
 
                 elif response == 257:
                     model = self.selector.get_model(0)
