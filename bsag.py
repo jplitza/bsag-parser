@@ -47,8 +47,8 @@ class AmbiguityException(Exception):
 class Station:
     def __init__(self, station, city = None):
         if (city == None or city == "") and station.find(', ') > -1:
-            city = station.split(', ')[0]
-            station = station.split(', ')[1]
+            city = station.split(', ', 2)[0]
+            station = station.split(', ', 2)[1]
         self.station = station.replace(' (Main Station)', '')
         self.city = city
 
@@ -237,7 +237,7 @@ class Request:
     def get_url(self):
         return (_REQ_URL
           + ('&' if _REQ_URL.find('?') > -1 else '?')
-          + urllib.urlencode(self.post)
+          + urlencode(self.post)
         )
 
 if __name__ == '__main__':
