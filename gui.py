@@ -357,6 +357,8 @@ class SearchForm:
                 else:
                     obj = backend.Station(station.get_text(), self.parent.default_city)
                 self.selector.get_model(0).append([str(obj), obj])
+                station.set_text("")
+                city.set_text("")
 
     def switch_deparr(self, widget):
         tmp = (self.origin_station.get_text(), self.origin_city.get_text())
