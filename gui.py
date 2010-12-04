@@ -18,6 +18,9 @@ import bsag as backend
 gobject.threads_init()
 gtk.gdk.threads_init()
 
+def lock_on_empty(widget, target):
+    target.set_sensitive(widget.get_text() != "")
+
 class SearchForm:
     GCONF_PATH = '/apps/bsag/'
 
@@ -57,13 +60,12 @@ class SearchForm:
 
         self.pan = hildon.PannableArea()
         self.form = gtk.VBox()
-        table = gtk.Table(3, 4, False)
+        table = gtk.Table(4, 4, False)
 
 
         self.origin_station = hildon.Entry(
             gtk.HILDON_SIZE_FINGER_HEIGHT)
         self.origin_station.connect("activate", self.search_activated)
-        self.origin_station.connect("changed", self.lock_submit)
         table.attach(self.origin_station, 1, 2, 0, 1)
 
         self.origin_city = hildon.Entry(
@@ -81,7 +83,6 @@ class SearchForm:
         self.destination_station = hildon.Entry(
             gtk.HILDON_SIZE_FINGER_HEIGHT)
         self.destination_station.connect("activate", self.search_activated)
-        self.destination_station.connect("changed", self.lock_submit)
         self.destination_station.set_placeholder("Zielhaltestelle")
         table.attach(self.destination_station, 1, 2, 1, 2)
 
@@ -92,13 +93,18 @@ class SearchForm:
 
         self.origin_city.connect("changed", self.placeholder_changer, self.destination_city, "Stadt (%s)", self.default_city)
 
-
         arrfav = hildon.Button(gtk.HILDON_SIZE_FINGER_HEIGHT,
             hildon.BUTTON_ARRANGEMENT_VERTICAL,
             title = "")
         arrfav.set_image(gtk.image_new_from_file(favicon))
         arrfav.connect("clicked", self.favourite_selector, (self.destination_station, self.destination_city))
         table.attach(arrfav, 0, 1, 1, 2, gtk.FILL, gtk.FILL)
+
+        switcher = hildon.Button(gtk.HILDON_SIZE_AUTO,
+            hildon.BUTTON_ARRANGEMENT_VERTICAL,
+            title = "<>")
+        switcher.connect("clicked", self.switch_deparr)
+        table.attach(switcher, 3, 4, 0, 2, gtk.FILL, gtk.FILL)
 
         self.deparr = hildon.GtkToggleButton(
             gtk.HILDON_SIZE_FINGER_HEIGHT)
@@ -118,12 +124,22 @@ class SearchForm:
         self.time.set_alignment(0, 0, 0, 0)
         table.attach(self.time, 2, 3, 2, 3)
 
+        self.now = hildon.GtkToggleButton(
+            gtk.HILDON_SIZE_FINGER_HEIGHT)
+        self.now.set_label("Jetzt")
+        self.now.connect("toggled", self.now_toggled)
+        self.now.set_active(True)
+        table.attach(self.now, 3, 4, 2, 3, gtk.FILL, gtk.FILL)
+
         self.submit = hildon.Button(gtk.HILDON_SIZE_FINGER_HEIGHT,
             hildon.BUTTON_ARRANGEMENT_VERTICAL,
             title = "Suche starten")
         self.submit.connect("clicked", self.search_activated)
-        table.attach(self.submit, 0, 3, 3, 4)
-        self.lock_submit(None)
+        table.attach(self.submit, 0, 4, 3, 4)
+
+        lock_on_empty(self.destination_station, self.submit)
+        self.destination_station.connect("changed", lock_on_empty, self.submit)
+        self.update_placeholders()
 
         self.form.pack_start(table, False, False, 0)
         self.pan.add_with_viewport(self.form)
@@ -145,11 +161,6 @@ class SearchForm:
                                 gconf.VALUE_STRING
         )]
 
-    def lock_submit(self, widget):
-        self.submit.set_sensitive(
-            self.origin_station.get_text() != "" and self.destination_station.get_text() != ""
-        )
-
     def search_activated(self, widget = None):
         thread = Thread(target=self.do_search)
         thread.start()
@@ -157,8 +168,15 @@ class SearchForm:
 
     def do_search(self):
         try:
-            date = self.date.get_date()
-            time = self.time.get_time()
+            if self.now.get_active():
+                date = datetime.datetime.now()
+            else:
+                date = self.date.get_date()
+                time = self.time.get_time()
+                date = datetime.datetime(date[0], date[1]+1, date[2], time[0], time[1])
+            origin_station = self.origin_station.get_text()
+            if origin_station == "":
+                origin_station = self.default_station
             origin_city = self.origin_city.get_text()
             if origin_city == "":
                 origin_city = self.default_city
@@ -166,9 +184,9 @@ class SearchForm:
             if destination_city == "":
                 destination_city = self.default_city
             self.request = backend.Request(
-                origin=backend.Station(self.origin_station.get_text(), origin_city),
+                origin=backend.Station(origin_station, origin_city),
                 destination=backend.Station(self.destination_station.get_text(), destination_city),
-                date=datetime.datetime(date[0], date[1]+1, date[2], time[0], time[1]),
+                date=date,
                 deparr="dep" if self.deparr.get_active() else "arr"
             )
         except backend.AmbiguityException, e:
@@ -262,8 +280,8 @@ class SearchForm:
                     new_favourite_station, new_favourite_city)
             hbox.pack_start(new_favourite_button, False)
 
-            new_favourite_station.connect("changed", self.lock_on_empty, new_favourite_button)
-            self.lock_on_empty(new_favourite_station, new_favourite_button)
+            new_favourite_station.connect("changed", lock_on_empty, new_favourite_button)
+            lock_on_empty(new_favourite_station, new_favourite_button)
 
             self.dialog.vbox.pack_start(hbox)
 
@@ -336,8 +354,21 @@ class SearchForm:
                     obj = backend.Station(station.get_text(), parent.default_city)
                 self.selector.get_model(0).append([str(obj), obj])
 
-        def lock_on_empty(self, widget, target):
-            target.set_sensitive(widget.get_text() != "")
+    def switch_deparr(self, widget):
+        tmp = (self.origin_station.get_text(), self.origin_city.get_text())
+        self.origin_station.set_text(self.destination_station.get_text())
+        self.origin_city.set_text(self.destination_city.get_text())
+        self.destination_station.set_text(tmp[0])
+        self.destination_city.set_text(tmp[1])
+
+    def now_toggled(self, widget):
+        active = widget.get_active()
+        self.date.set_sensitive(not active)
+        self.time.set_sensitive(not active)
+        if not active:
+            now = datetime.datetime.now()
+            self.date.set_date(now.year, now.month, now.day)
+            self.time.set_time(now.hour, now.minute)
 
 class ResultView:
     def __init__(self, req):
