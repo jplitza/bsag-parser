@@ -83,7 +83,6 @@ class SearchForm:
         self.destination_station = hildon.Entry(
             gtk.HILDON_SIZE_FINGER_HEIGHT)
         self.destination_station.connect("activate", self.search_activated)
-        self.destination_station.set_placeholder("Zielhaltestelle")
         table.attach(self.destination_station, 1, 2, 1, 2)
 
         self.destination_city = hildon.Entry(
@@ -137,8 +136,11 @@ class SearchForm:
         self.submit.connect("clicked", self.search_activated)
         table.attach(self.submit, 0, 4, 3, 4)
 
-        lock_on_empty(self.destination_station, self.submit)
-        self.destination_station.connect("changed", lock_on_empty, self.submit)
+        self.lock_submit()
+        self.origin_station.connect("changed", self.lock_submit)
+        self.origin_city.connect("changed", self.lock_submit)
+        self.destination_city.connect("changed", self.lock_submit)
+        self.destination_station.connect("changed", self.lock_submit)
         self.update_placeholders()
 
         self.form.pack_start(table, False, False, 0)
@@ -147,12 +149,19 @@ class SearchForm:
 
         self.win.show_all()
 
+    def lock_submit(self, *args):
+        self.submit.set_sensitive(
+            self.origin_station.get_text() != self.destination_station.get_text() or
+            self.origin_city.get_text()    != self.destination_city.get_text()
+        )
+
     def placeholder_changer(self, widget, target, text, default):
         target.set_placeholder(text % (widget.get_text() if len(widget.get_text()) > 0 else default))
 
     def update_placeholders(self):
         self.origin_station.set_placeholder("Starthaltestelle (%s)" % self.default_station)
         self.origin_city.set_placeholder("Stadt (%s)" % self.default_city)
+        self.destination_station.set_placeholder("Zielhaltestelle (%s)" % self.default_station)
         self.placeholder_changer(self.origin_city, self.destination_city, "Stadt (%s)", self.default_city)
 
     def get_favourites(self):
@@ -180,12 +189,15 @@ class SearchForm:
             origin_city = self.origin_city.get_text()
             if origin_city == "":
                 origin_city = self.default_city
+            destination_station = self.destination_station.get_text()
+            if destination_station == "":
+                destination_station = self.default_station
             destination_city = self.destination_city.get_text()
             if destination_city == "":
                 destination_city = self.default_city
             self.request = backend.Request(
                 origin=backend.Station(origin_station, origin_city),
-                destination=backend.Station(self.destination_station.get_text(), destination_city),
+                destination=backend.Station(destination_station, destination_city),
                 date=date,
                 deparr="dep" if self.deparr.get_active() else "arr"
             )
@@ -377,7 +389,7 @@ class SearchForm:
         self.time.set_sensitive(not active)
         if not active:
             now = datetime.datetime.now()
-            self.date.set_date(now.year, now.month, now.day)
+            self.date.set_date(now.year, now.month-1, now.day)
             self.time.set_time(now.hour, now.minute)
 
 class ResultView:
